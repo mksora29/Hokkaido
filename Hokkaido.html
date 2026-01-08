@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>2026 北海道自駕 (Final)</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        :root {
+            --primary: #0056b3;
+            --accent: #d32f2f;
+            --bg: #f0f2f5;
+            --card-bg: #fff;
+            --text: #333;
+        }
+        
+        body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); padding-bottom: 80px; }
+
+        /* === Header === */
+        header {
+            background: var(--primary); color: white; padding: 12px 16px; 
+            position: sticky; top: 0; z-index: 1000;
+            display: flex; justify-content: space-between; align-items: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        }
+        h1 { margin: 0; font-size: 1.1rem; font-weight: bold; }
+        
+        /* 直接顯示匯率 */
+        .live-rate {
+            background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.3);
+            color: white; padding: 6px 12px; border-radius: 20px; font-size: 0.9rem; font-weight: bold;
+            display: flex; align-items: center; gap: 5px;
+        }
+
+        /* === Map Area === */
+        #map-container { height: 35vh; width: 100%; position: relative; border-bottom: 1px solid #ddd; }
+        #map { width: 100%; height: 100%; background: #e5e3df; }
+        .gps-btn {
+            position: absolute; bottom: 20px; right: 20px; width: 45px; height: 45px;
+            background: white; border-radius: 50%; box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            display: flex; align-items: center; justify-content: center; z-index: 900; font-size: 22px; cursor: pointer;
+        }
+
+        /* === Tabs === */
+        .tabs {
+            display: flex; overflow-x: auto; background: #fff; padding: 10px 0;
+            scrollbar-width: none; border-bottom: 1px solid #eee;
+        }
+        .tab {
+            flex: 0 0 auto; margin: 0 5px; padding: 8px 16px; border-radius: 20px;
+            background: #f5f5f5; color: #666; font-size: 14px; font-weight: bold; transition: 0.2s; cursor: pointer;
+        }
+        .tab:first-child { margin-left: 10px; }
+        .tab.active { background: var(--primary); color: #FFF; box-shadow: 0 2px 5px rgba(0,86,179,0.3); }
+
+        /* === List View === */
+        .list-container { padding: 15px; }
+        
+        .weather-bar {
+            background: linear-gradient(to right, #4facfe 0%, #00f2fe 100%);
+            color: white; padding: 10px 15px; border-radius: 8px; margin-bottom: 20px;
+            display: flex; justify-content: space-between; align-items: center;
+            font-weight: bold; font-size: 0.95rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .travel-line {
+            display: flex; align-items: center; margin-left: 17px; height: 30px;
+            border-left: 2px dashed #ccc; padding-left: 20px; color: #666; font-size: 0.8rem; font-weight: bold;
+        }
+
+        .card {
+            background: var(--card-bg); border-radius: 10px; padding: 12px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05); margin-bottom: 0;
+            border: 1px solid #eee; cursor: pointer; display: flex; gap: 12px;
+        }
+        .card:active { background: #f9f9f9; }
+
+        .num-badge {
+            width: 28px; height: 28px; background: var(--primary); color: white;
+            border-radius: 50%; text-align: center; line-height: 28px; font-weight: bold; font-size: 14px;
+            flex-shrink: 0; margin-top: 2px;
+        }
+
+        .card-content { flex: 1; }
+        .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+        .card-time { font-size: 0.9rem; font-weight: bold; color: #555; background: #eee; padding: 2px 6px; border-radius: 4px; }
+        .card-title { font-size: 1.1rem; font-weight: bold; color: #222; margin-bottom: 6px; }
+        
+        /* Info Grid */
+        .info-grid {
+            display: grid; grid-template-columns: 1fr; gap: 4px; font-size: 0.85rem; color: #555;
+            background: #f9f9f9; padding: 8px; border-radius: 6px; margin-bottom: 8px;
+        }
+        .info-item { display: flex; gap: 6px; }
+        .icon { width: 16px; text-align: center; }
+        .highlight { color: #d32f2f; font-weight: bold; }
+
+        .card-footer { display: flex; justify-content: space-between; align-items: center; }
+        .mapcode-box {
+            font-family: monospace; font-size: 0.9rem; color: var(--primary); font-weight: bold;
+            background: #e3f2fd; padding: 4px 8px; border-radius: 4px; border: 1px dashed var(--primary);
+        }
+        .price-text { font-weight: bold; color: #2e7d32; font-size: 0.95rem; }
+
+        /* Map Markers */
+        .map-marker-icon {
+            background: var(--primary); color: white; width: 30px; height: 30px;
+            border-radius: 50%; text-align: center; line-height: 26px;
+            font-weight: bold; font-size: 14px; border: 2px solid white;
+            box-shadow: 0 3px 6px rgba(0,0,0,0.3);
+        }
+
+        /* Popup Styling */
+        .leaflet-popup-content-wrapper { padding: 0; border-radius: 10px; overflow: hidden; }
+        .leaflet-popup-content { margin: 0; width: 260px !important; }
+        .pop-body { padding: 15px; text-align: center; }
+        .pop-title { font-size: 1.1rem; font-weight: bold; margin-bottom: 5px; color: #333; }
+        .pop-btn {
+            display: block; background: #4285F4; color: white; text-decoration: none;
+            padding: 10px; border-radius: 50px; font-weight: bold; margin-top: 10px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        .pop-btn:active { transform: scale(0.98); }
+
+        /* Toast */
+        #toast {
+            visibility: hidden; position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
+            background: rgba(0,0,0,0.85); color: white; padding: 12px 24px; border-radius: 50px;
+            font-weight: bold; font-size: 14px; z-index: 3000; box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+        #toast.show { visibility: visible; animation: fadein 0.3s, fadeout 0.3s 2s; }
+        @keyframes fadein { from {bottom: 10px; opacity: 0;} to {bottom: 30px; opacity: 1;} }
+        @keyframes fadeout { from {bottom: 30px; opacity: 1;} to {bottom: 10px; opacity: 0;} }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>2026 北海道自駕</h1>
+    <div class="live-rate" id="header-rate"></div>
+</header>
+
+<div id="map-container">
+    <div id="map"></div>
+    <div class="gps-btn" onclick="locateMe()">📍</div>
+</div>
+
+<div class="tabs" id="tabs-container"></div>
+
+<div class="list-container">
+    <div id="weather-bar" class="weather-bar"></div>
+    <div id="itinerary-list"></div>
+</div>
+
+<div id="toast">已複製 MapCode</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+    const RATE = 0.053;
+    // 設置頂部匯率顯示 (100 JPY = XX HKD)
+    document.getElementById('header-rate').innerHTML = `🇯🇵 100円 ≈ 🇭🇰 $${(100 * RATE).toFixed(1)}`;
+
+    // === 行程資料 ===
+    const data = [
+        {
+            day: "Day 1", date: "1月31日 (六) 名古屋",
+            weather: "☁️ 2°C ~ 9°C | 建議: 輕羽絨",
+            items: [
+                { t: "13:00", n: "香港機場 / 抵達名古屋", note: "13:00到機場，20:05到名古屋。", c: "---", p: 0, lat: 34.8584, lng: 136.8053 },
+                { 
+                    t: "21:30", n: "新時代 伝串", travel: "🚆 45分鐘", 
+                    note: "常滑駅前店。", c: "---", p: 2000, lat: 34.8906, lng: 136.8344,
+                    hours: "17:00 - 24:00", rec: "必食：炸雞皮串、生啤"
+                },
+                { t: "23:00", n: "常滑/機場酒店", travel: "🚶 10分鐘", note: "明早04:00起身。", c: "---", p: 0, lat: 34.8616, lng: 136.8115 }
+            ]
+        },
+        {
+            day: "Day 2", date: "2月1日 (日) 札幌➔洞爺",
+            weather: "🌨️ -6°C ~ -1°C | 建議: 防滑雪靴",
+            items: [
+                { t: "05:00", n: "NGO ✈️ CTS", note: "07:05起飛。", c: "---", p: 0, lat: 42.7874, lng: 141.6814 },
+                { t: "10:00", n: "新千歲取車", travel: "🚶 到達", note: "出關取車，檢查雪胎。", c: "113 744 720*63", p: "租車", lat: 42.7874, lng: 141.6814 },
+                { 
+                    t: "11:30", n: "二條市場", travel: "🚗 60分鐘", 
+                    note: "海鮮丼午餐。", c: "9 493 643*12", p: 3000, lat: 43.0573, lng: 141.3585,
+                    hours: "07:00 - 17:00", rec: "推介：大磯、茶屋"
+                },
+                { 
+                    t: "13:00", n: "Curry Ya! CONG", travel: "🚗 10分鐘", 
+                    note: "湯咖喱 (備選)。", c: "9 432 642*55", p: 1500, lat: 43.0503, lng: 141.3506,
+                    hours: "11:30 - 15:00", rec: "必食：漢堡扒湯咖喱"
+                },
+                { 
+                    t: "14:00", n: "白色戀人公園", travel: "🚗 25分鐘", 
+                    note: "15:00 離開札幌。", c: "9 602 326*11", p: 800, lat: 43.0886, lng: 141.2704,
+                    hours: "10:00 - 18:00", rec: "必買：限定版白之戀人"
+                },
+                { 
+                    t: "17:00", n: "Yutorelo Toyako", travel: "🚗 1小時50分", 
+                    note: "溫泉酒店 (晚餐18:00)。", c: "321 519 548*60", p: "已訂", lat: 42.5654, lng: 140.8202,
+                    rec: "必做：浸溫泉、懷石晚餐"
+                }
+            ]
+        },
+        {
+            day: "Day 3", date: "2月2日 (一) 洞爺➔函館",
+            weather: "🌬️ -5°C ~ 0°C | 建議: 防風外套",
+            items: [
+                { t: "10:15", n: "筒倉展望台", travel: "🚗 15分鐘", note: "洞爺湖全景。", c: "321 433 319*63", p: 0, lat: 42.6133, lng: 140.7877, rec: "必買：牧家Bocca布甸" },
+                { t: "11:00", n: "道の駅 Aputa", travel: "🚗 20分鐘", note: "必買海膽飯。", c: "321 346 397*52", p: 2500, lat: 42.5357, lng: 140.7644, rec: "必食：整板海膽" },
+                { t: "12:00", n: "仙堂庵 (午餐)", travel: "🚗 10分鐘", note: "15:00 離開洞爺。", c: "321 518 534*88", p: 1500, lat: 42.5539, lng: 140.8173 },
+                { t: "19:00", n: "函館山夜景", travel: "🚗 2小時30分", note: "百萬夜景 (極冷)。", c: "86 041 054*41", p: 1800, lat: 41.7613, lng: 140.7144, hours: "10:00 - 21:00" }
+            ]
+        },
+        {
+            day: "Day 4", date: "2月3日 (二) 函館➔小樽",
+            weather: "❄️ -6°C ~ -2°C | 建議: 貼暖包",
+            items: [
+                { t: "06:00", n: "函館朝市", note: "釣烏賊體驗。", c: "86 072 344*41", p: 2000, lat: 41.7725, lng: 140.7250, hours: "06:00 - 14:00", rec: "必做：釣活烏賊刺身" },
+                { t: "10:00", n: "小丑漢堡", travel: "🚗 5分鐘", note: "中華雞腿堡。", c: "86 041 645*88", p: 800, lat: 41.7681, lng: 140.7186, rec: "必食：No.1 雞腿堡" },
+                { t: "13:00", n: "五稜郭塔", travel: "🚗 20分鐘", note: "星形公園。", c: "86 165 057*12", p: 1000, lat: 41.7955, lng: 140.7551 },
+                { t: "17:00", n: "長途移動 (八雲PA)", travel: "🚗 1小時30分", note: "中途休息站。", c: "468 052 708*85", p: 0, lat: 42.2530, lng: 140.2769 },
+                { t: "23:00", n: "小樽酒店", travel: "🚗 2小時45分", note: "自助 Check-in。", c: "---", p: "已訂", lat: 43.1995, lng: 141.0016 }
+            ]
+        },
+        {
+            day: "Day 5", date: "2月4日 (三) 小樽➔旭川",
+            weather: "☃️ -12°C ~ -4°C | 建議: 兩層褲子",
+            items: [
+                { t: "09:30", n: "小樽堺町通", note: "LeTAO、八音盒。", c: "493 660 635*41", p: 1500, lat: 43.1916, lng: 141.0076, hours: "09:00 - 18:00", rec: "必食：雙層芝士蛋糕" },
+                { t: "15:00", n: "札幌雪祭 (大通)", travel: "🚗 45分鐘", note: "雪雕展。", c: "9 522 448*88", p: 0, lat: 43.0601, lng: 141.3533, rec: "必看：大型雪雕" },
+                { t: "19:30", n: "成吉思汗 大黑屋", travel: "🚗 2小時", note: "旭川燒肉。", c: "79 342 546*36", p: 4000, lat: 43.7651, lng: 142.3619, hours: "17:00 - 22:30", rec: "必食：生羊肉燒肉" }
+            ]
+        },
+        {
+            day: "Day 6", date: "2月5日 (四) 旭川・美瑛",
+            weather: "🥶 -15°C ~ -6°C | 建議: 最強保暖",
+            items: [
+                { t: "09:00", n: "聖誕樹之木", travel: "🚗 40分鐘", note: "路邊拍照 (禁入農田)。", c: "349 788 146*81", p: 0, lat: 43.5599, lng: 142.4820 },
+                { t: "10:30", n: "旭山動物園", travel: "🚗 30分鐘", note: "企鵝散步。", c: "79 358 805*17", p: 1000, lat: 43.7687, lng: 142.4795, hours: "10:30 - 15:30", rec: "必看：企鵝散步 (11:00)" },
+                { t: "16:00", n: "白鬚瀑布", travel: "🚗 50分鐘", note: "清池附近。", c: "796 182 604*25", p: 0, lat: 43.4754, lng: 142.6416 },
+                { t: "17:00", n: "白金清池", travel: "🚗 5分鐘", note: "夜間點燈。", c: "349 568 888*00", p: 500, lat: 43.4934, lng: 142.6139, rec: "必看：冬季限定點燈" }
+            ]
+        },
+        {
+            day: "Day 7", date: "2月6日 (五) 富良野",
+            weather: "🌨️ -12°C ~ -5°C | 建議: 防滑冰爪",
+            items: [
+                { t: "09:30", n: "森林精靈露台", travel: "🚗 40分鐘", note: "小木屋商店。", c: "919 552 416*41", p: 0, lat: 43.3243, lng: 142.3551, hours: "12:00 - 20:45" },
+                { t: "12:00", n: "唯我獨尊", travel: "🚗 10分鐘", note: "黑咖喱。", c: "349 032 073*41", p: 1200, lat: 43.3446, lng: 142.3879, hours: "11:00 - 21:00", rec: "必食：自家製香腸咖喱" },
+                { t: "18:00", n: "札幌購物", travel: "🚗 2小時", note: "最後衝刺。", c: "9 522 448*88", p: 0, lat: 43.0601, lng: 141.3533 }
+            ]
+        },
+        {
+            day: "Day 8", date: "2月7日 (六) 機場",
+            weather: "⛅ -3°C ~ 2°C | 建議: 洋蔥式穿搭",
+            items: [
+                { t: "09:00", n: "清田稻荷神社", travel: "🚗 25分鐘", note: "紅色鳥居。", c: "9 292 278*25", p: 0, lat: 42.9926, lng: 141.4468 },
+                { t: "11:30", n: "三井Outlet北廣島", travel: "🚗 20分鐘", note: "購物。", c: "708 630 468*78", p: 0, lat: 42.9691, lng: 141.4627, hours: "10:00 - 20:00" },
+                { t: "16:00", n: "新千歲機場", travel: "🚗 35分鐘", note: "還車入油。18:25要到。", c: "113 745 595*55", p: 0, lat: 42.7874, lng: 141.6814 }
+            ]
+        },
+        {
+            day: "Day 9", date: "2月8日 (日) 名古屋",
+            weather: "☀ 3°C ~ 10°C | 建議: 舒適便服",
+            items: [
+                { t: "09:00", n: "大須觀音", note: "名古屋觀光。", c: "---", p: 0, lat: 35.1598, lng: 136.8997 }
+            ]
+        }
+    ];
+
+    // === Map & Init ===
+    let map = null, markers = [], userMarker = null;
+    try {
+        map = L.map('map').setView([43.0, 141.5], 7);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OSM' }).addTo(map);
+    } catch(e) { document.getElementById('map').innerHTML = "<div style='text-align:center;padding:20px;color:#999;'>需要網絡載入地圖</div>"; }
+
+    // === Tabs ===
+    const tabsContainer = document.getElementById('tabs-container');
+    data.forEach((day, index) => {
+        const t = document.createElement('div');
+        t.className = `tab ${index === 0 ? 'active' : ''}`;
+        t.innerText = day.day;
+        t.onclick = () => renderDay(index);
+        tabsContainer.appendChild(t);
+    });
+
+    // === Render ===
+    function renderDay(index) {
+        document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', i === index));
+        const dayInfo = data[index];
+        const list = document.getElementById('itinerary-list');
+        list.innerHTML = '';
+        
+        // 天氣 (含穿搭)
+        document.getElementById('weather-bar').innerHTML = `<span>${dayInfo.weather.split('|')[0]}</span><span style="font-size:0.85rem;opacity:0.9">${dayInfo.weather.split('|')[1]}</span>`;
+
+        if(map) { markers.forEach(m => map.removeLayer(m)); markers = []; }
+        const bounds = [];
+
+        dayInfo.items.forEach((item, i) => {
+            const num = i + 1;
+
+            // Map
+            if(map && item.lat) {
+                const icon = L.divIcon({
+                    className: 'custom-icon',
+                    html: `<div class="map-marker-icon">${num}</div>`,
+                    iconSize: [30, 30], iconAnchor: [15, 15]
+                });
+                
+                // POPUP BUTTON -> GOOGLE MAPS DIRECT LINK
+                const popContent = `
+                    <div class="pop-body">
+                        <div class="pop-title">${num}. ${item.n}</div>
+                        <a href="https://www.google.com/maps/dir/?api=1&destination=${item.lat},${item.lng}" target="_blank" class="pop-btn">🚀 Google Maps 導航</a>
+                    </div>
+                `;
+                
+                const m = L.marker([item.lat, item.lng], {icon: icon}).addTo(map).bindPopup(popContent);
+                markers.push(m);
+                bounds.push([item.lat, item.lng]);
+            }
+
+            // Travel Line
+            if (item.travel) {
+                const travelDiv = document.createElement('div');
+                travelDiv.className = 'travel-line';
+                travelDiv.innerHTML = `⬇️ ${item.travel}`;
+                list.appendChild(travelDiv);
+            }
+
+            // Card
+            const card = document.createElement('div');
+            card.className = 'card';
+
+            let priceText = '<span class="price-text" style="color:#666">免費</span>';
+            if (typeof item.p === 'number' && item.p > 0) {
+                const hkd = Math.round(item.p * RATE);
+                priceText = `<span style="font-size:0.8rem;color:#999;text-decoration:line-through;margin-right:5px;">¥${item.p}</span><span class="price-text">HK$${hkd}</span>`;
+            } else if (typeof item.p === 'string') {
+                priceText = `<span class="price-text" style="color:#d32f2f;">${item.p}</span>`;
+            }
+
+            const mapCodeHtml = item.c !== "---" ? `<div class="mapcode-box" onclick="event.stopPropagation(); copy('${item.c}')">${item.c} ❐</div>` : '<div></div>';
+            
+            let details = '';
+            if (item.hours) details += `<div class="info-item"><span class="icon">🕒</span> 營業: ${item.hours}</div>`;
+            if (item.rec) details += `<div class="info-item"><span class="icon">⭐</span> <span class="highlight">${item.rec}</span></div>`;
+            if (details) details = `<div class="info-grid">${details}</div>`;
+
+            let warnHtml = (item.note.includes('最遲') || item.note.includes('入油')) ? `<span style="color:red;font-weight:bold;font-size:0.8rem;background:#ffebee;padding:2px 5px;border-radius:4px;margin-right:5px;">⚠️ 注意</span>` : '';
+
+            card.innerHTML = `
+                <div class="num-badge">${num}</div>
+                <div class="card-content">
+                    <div class="card-header"><div class="card-time">${item.t}</div></div>
+                    <div class="card-title">${item.n}</div>
+                    <div style="font-size:0.9rem;color:#666;margin-bottom:8px;">${warnHtml}${item.note}</div>
+                    ${details}
+                    <div class="card-footer">
+                        ${mapCodeHtml}
+                        <div>${priceText}</div>
+                    </div>
+                </div>
+            `;
+            
+            card.onclick = () => {
+                if(map && item.lat) {
+                    map.flyTo([item.lat, item.lng], 13);
+                    if(markers[i]) markers[i].openPopup();
+                    window.scrollTo({top:0, behavior:'smooth'});
+                }
+            };
+            list.appendChild(card);
+        });
+
+        if(map && bounds.length) map.fitBounds(bounds, {padding:[50,50]});
+    }
+
+    function copy(text) {
+        navigator.clipboard.writeText(text).then(() => {
+            const t = document.getElementById('toast');
+            t.className = 'show';
+            setTimeout(() => t.className = '', 2000);
+        });
+    }
+    
+    function locateMe() {
+        if(!map) return;
+        map.locate({setView: true, maxZoom: 14});
+        map.on('locationfound', e => {
+            if(userMarker) map.removeLayer(userMarker);
+            userMarker = L.circleMarker(e.latlng, {radius: 8, color: '#fff', fillColor: '#007AFF', fillOpacity: 1}).addTo(map);
+        });
+    }
+
+    renderDay(0);
+</script>
+</body>
+</html>
